@@ -16,8 +16,8 @@ datasource db {
 
 model event{
 id String @id @default(uuid())
-status String
-retryCount Int
+status String @default("PENDING")
+retryCount Int @default(0)
 eventType String
 payload Json
 createdAt DateTime @default(now())
