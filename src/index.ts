@@ -1,5 +1,6 @@
 import app from "./app.js";
 import dotenv from "dotenv"
+import prisma from "./postgres/prisma.js";
 dotenv.config({
     path: "./.env"
 })
@@ -13,3 +14,7 @@ app.listen({port}, (err) => {
     }
     console.log(`Serving at ${port}`);
 });
+
+app.addHook("onClose", async () => {
+    await prisma.$disconnect();
+})
