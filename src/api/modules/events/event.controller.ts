@@ -24,6 +24,10 @@ const createEventController = async (req: FastifyRequest<{ Body: eventData }>, r
         });
     }
 
-    return reply.status(201).send(createEvent);
+    return reply.status(201).send(createdEvent);
 
+}
+
+export {
+    createEventController
 }

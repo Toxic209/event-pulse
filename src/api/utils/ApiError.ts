@@ -7,7 +7,7 @@ export class ApiError extends Error {
         message: string,
         statusCode: number,
         errorCode: string,
-        details?: string
+        details?: unknown
     }) {
         super(message);
 

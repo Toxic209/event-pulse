@@ -8,11 +8,16 @@ dotenv.config({
 const port: number = Number(process.env.PORT ?? 4000);
 
 app.listen({port}, (err) => {
-    if(err){
-        app.log.error(err);
-        process.exit(1);
+    try {
+        if(err){
+            app.log.error(err);
+            process.exit(1);
+        }
+        console.log(`Serving at ${port}`);
+    } catch (error) {
+        console.log(error)
+        throw error;
     }
-    console.log(`Serving at ${port}`);
 });
 
 app.addHook("onClose", async () => {

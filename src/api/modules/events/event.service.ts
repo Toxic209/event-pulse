@@ -1,5 +1,5 @@
 import prisma from "../../../postgres/prisma.js";
-import type  eventData  from "../../types/types.js";
+import type eventData from "../../types/types.js";
 import { ApiError } from "../../utils/ApiError.js";
 
 const createEvent = async (eventData: eventData) => {
@@ -13,13 +13,22 @@ const createEvent = async (eventData: eventData) => {
         });
 
         //this section will deal with redis event pushes later.
-        
+
         return event;
     } catch (error) {
-        throw error;
+
+        console.log(error);
+
+        throw new ApiError({
+            message: "Can't create Event in the database!",
+            statusCode: 500,
+            errorCode: "SERVER ERROR",
+            details: error instanceof Error ? error.message : "Unknown Error"
+        });
+
     }
 
 
 }
 
-export {createEvent}
+export { createEvent }
