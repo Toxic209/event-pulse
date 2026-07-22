@@ -5,8 +5,10 @@ const app = Fastify({
     logger: true
 });
 
-app.addHook("onClose", async () => {
-    await prisma.$disconnect();
+app.decorate("prisma", prisma);
+
+app.addHook("onClose", async (instance) => {
+    await instance.prisma.$disconnect();
 })
 
 export default app;

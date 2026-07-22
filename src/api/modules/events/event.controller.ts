@@ -1,6 +1,6 @@
-import { createEvent } from "../service/event.service.js";
-import type eventData from "../types/types.js";
-import { ApiError } from "../utils/ApiError.js";
+import { createEvent } from "./event.service.js";
+import type eventData from "../../types/types.js";
+import { ApiError } from "../../utils/ApiError.js";
 import type { FastifyRequest, FastifyReply } from "fastify";
 
 const createEventController = async (req: FastifyRequest<{ Body: eventData }>, reply: FastifyReply) => {
