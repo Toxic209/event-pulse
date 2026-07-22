@@ -1,6 +1,7 @@
 import prisma from "../../../postgres/prisma.js";
 import type eventData from "../../types/types.js";
 import { ApiError } from "../../utils/ApiError.js";
+import redis from "../../../redis/redis.js";
 
 const createEvent = async (eventData: eventData) => {
     try {
@@ -13,8 +14,13 @@ const createEvent = async (eventData: eventData) => {
         });
 
         //this section will deal with redis event pushes later.
+        await redis.xAdd("event", "*", {
+            eventType: eventData.eventType,
+            payload: JSON.stringify(eventData.payload)
+        });
 
         return event;
+
     } catch (error) {
 
         console.log(error);
