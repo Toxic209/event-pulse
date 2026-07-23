@@ -15,7 +15,8 @@
   "type": "module",
   "main": "index.ts",
   "scripts": {
-    "dev": "nodemon src/index.ts"
+    "dev": "nodemon src/index.ts",
+    "worker": "tsx watch src/worker/testWorker.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
