@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/Toxic209/event-pulse/src/worker/internals/redis"
@@ -9,20 +10,23 @@ import (
 )
 
 func main() {
-	fmt.Println("Go worker running...")
+	fmt.Println("Go worker running...");
 
 	for {
 
-		redis := redis.NewRedisClient()
+		redis := redis.NewRedisClient();
 
-		streams.EnsureGroupCreation(redis)
+		streams.EnsureGroupCreation(redis);
 
 		consumerName := "worker-1"
 		if len(os.Args) >= 3 {
-			consumerName = os.Args[2]
+			consumerName = os.Args[2];
 		}
 
-		message := streams.FetchEvent(redis, "event-processors", consumerName);
-		fmt.Println(message);
+		err := streams.FetchEvent(redis, "event-processors", consumerName);
+
+		if err != nil {
+			log.Println(err)
+		}
 	}
 }

@@ -30,7 +30,14 @@ func FetchEvent(client *redis.Client, processorGroup string, consumerName string
 		return error;
 	}
 
-	fmt.Println(streams)
+	for _, stream := range streams {
+		for _, msg := range stream.Messages {
+			fmt.Println(msg.ID);
+			fmt.Printf("eventType: %s\n", msg.Values["eventType"]);
+			fmt.Printf("Payload: %s\n", msg.Values["payload"]);
+			client.XAck(context.Background(), "event", "event-processors", "$");
+		}
+	}
 
 	return nil;
 }
