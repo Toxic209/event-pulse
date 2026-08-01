@@ -35,7 +35,7 @@ func FetchEvent(client *redis.Client, processorGroup string, consumerName string
 			fmt.Println(msg.ID);
 			fmt.Printf("eventType: %s\n", msg.Values["eventType"]);
 			fmt.Printf("Payload: %s\n", msg.Values["payload"]);
-			client.XAck(context.Background(), "event", "event-processors", "$");
+			client.XAck(context.Background(), "event", "event-processors", msg.ID);
 		}
 	}
 
