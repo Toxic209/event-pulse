@@ -20,7 +20,7 @@ func main() {
 
 		consumerName := "worker-1"
 		if len(os.Args) >= 3 {
-			consumerName = os.Args[2];
+			consumerName = os.Args[1];
 		}
 
 		err := streams.FetchEvent(redis, "event-processors", consumerName);
