@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
-	"log"
-	"os"
-
 	"github.com/Toxic209/event-pulse/src/worker/internals/redis"
 	"github.com/Toxic209/event-pulse/src/worker/internals/streams"
+	"github.com/Toxic209/event-pulse/src/worker/internals/worker"
 )
 
 func main() {
@@ -18,15 +16,6 @@ func main() {
 
 		streams.EnsureGroupCreation(redis);
 
-		consumerName := "worker-1"
-		if len(os.Args) >= 3 {
-			consumerName = os.Args[1];
-		}
-
-		err := streams.FetchEvent(redis, "event-processors", consumerName);
-
-		if err != nil {
-			log.Println(err)
-		}
+		worker.StartWorker((redis))
 	}
 }
