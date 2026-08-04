@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/Toxic209/event-pulse/src/worker/internals/eventHandlers"
 )
 
 
@@ -32,9 +33,22 @@ func FetchEvent(client *redis.Client, processorGroup string, consumerName string
 
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
-			fmt.Println(msg.ID);
-			fmt.Printf("eventType: %s\n", msg.Values["eventType"]);
-			fmt.Printf("Payload: %s\n", msg.Values["payload"]);
+			// fmt.Println(msg.ID);
+			// fmt.Printf("eventType: %s\n", msg.Values["eventType"]);
+			// fmt.Printf("Payload: %s\n", msg.Values["payload"]);
+			payload, ok := msg.Values["payload"].(string)
+			fmt.Println(ok);
+			if !ok {
+				return fmt.Errorf("invalid payload");
+			}
+
+			switch msg.Values["eventType"]{
+			case "email":
+				eventhandlers.EmailHandler(payload);
+			case "payment":
+				eventhandlers.PaymentHandler(payload);
+			}
+			
 			client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();
 		}
 	}
