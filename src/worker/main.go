@@ -8,14 +8,12 @@ import (
 )
 
 func main() {
-	fmt.Println("Go worker running...");
+	fmt.Println("Go worker running...")
 
-	for {
+		redis := redis.NewRedisClient()
 
-		redis := redis.NewRedisClient();
-
-		streams.EnsureGroupCreation(redis);
+		streams.EnsureGroupCreation(redis)
 
 		worker.StartWorker((redis))
-	}
+	
 }

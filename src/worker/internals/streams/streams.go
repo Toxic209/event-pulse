@@ -6,6 +6,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/Toxic209/event-pulse/src/worker/internals/eventHandlers"
+	"github.com/Toxic209/event-pulse/src/worker/internals/postgres"
 )
 
 
@@ -16,7 +17,7 @@ func EnsureGroupCreation(client *redis.Client) error {
 	).Err();
 }
 
-func FetchEvent(client *redis.Client, processorGroup string, consumerName string, ) error {
+func FetchEvent(client *redis.Client, processorGroup string, consumerName string, repo *postgres.EventRepo) error {
 	streams, error := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 		Group: processorGroup,
 		Consumer: consumerName,
@@ -37,19 +38,33 @@ func FetchEvent(client *redis.Client, processorGroup string, consumerName string
 			// fmt.Printf("eventType: %s\n", msg.Values["eventType"]);
 			// fmt.Printf("Payload: %s\n", msg.Values["payload"]);
 			payload, ok := msg.Values["payload"].(string)
-			fmt.Println(ok);
+			// fmt.Println(ok);
 			if !ok {
 				return fmt.Errorf("invalid payload");
 			}
 
+			eventId, ok := msg.Values["eventId"].(string)
+				if !ok {
+					return fmt.Errorf("eventId is missing or not a string");
+				}
+
 			switch msg.Values["eventType"]{
-			case "email":
-				eventhandlers.EmailHandler(payload);
+
+			case "email":	
+				err := eventhandlers.EmailHandler(payload, eventId);
+				if err == nil {
+					err = repo.MarkComplete(eventId);
+				}
+				client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();
+
 			case "payment":
-				eventhandlers.PaymentHandler(payload);
+				err := eventhandlers.PaymentHandler(payload);
+				if err == nil {
+					err = repo.MarkComplete(eventId);
+				}
+				client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();	
 			}
 			
-			client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();
 		}
 	}
 
