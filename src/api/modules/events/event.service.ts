@@ -13,8 +13,11 @@ const createEvent = async (eventData: eventData) => {
             }
         });
 
+        console.log('service hit!');
+
 
         await redis.xAdd("event", "*", {
+            eventId: event.id,
             eventType: eventData.eventType,
             payload: JSON.stringify(eventData.payload)
         });
