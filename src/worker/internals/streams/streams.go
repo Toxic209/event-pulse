@@ -50,38 +50,46 @@ func FetchEvent(client *redis.Client, processorGroup string, consumerName string
 
 			case "email":
 				err := eventhandlers.EmailHandler(payload, eventId)
+
 				if err == nil {
+
 					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err);
-						continue;
+						log.Println(err)
+						continue
 					}
+
 				} else {
+					log.Println(err)
+
 					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err);
-						continue;
+						log.Println(err)
+						continue
 					}
+
 				}
-				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();
+				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result()
 				if err != nil {
-					fmt.Println(err);
+					fmt.Println(err)
 				}
 
 			case "payment":
 				err := eventhandlers.PaymentHandler(payload)
 				if err == nil {
 					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err);
-						continue;
+						log.Println(err)
+						continue
 					}
 				} else {
+					log.Println(err);
+
 					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err);
-						continue;
+						log.Println(err)
+						continue
 					}
 				}
-				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result();
+				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result()
 				if err != nil {
-					fmt.Println(err);
+					fmt.Println(err)
 				}
 			}
 		}
