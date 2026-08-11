@@ -2,12 +2,19 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type EventRepo struct {
 	db *pgx.Conn
+}
+
+type Events struct {
+	ID        string
+	EventType string
+	Payload   any
 }
 
 func NewEventRepo(db *pgx.Conn) EventRepo {
@@ -30,7 +37,7 @@ func (repo *EventRepo) MarkComplete(eventId string) error {
 		return err
 	}
 
-	return nil;
+	return nil
 }
 
 func (repo *EventRepo) MarkFailed(eventId string) error {
@@ -47,5 +54,42 @@ func (repo *EventRepo) MarkFailed(eventId string) error {
 		return err
 	}
 
-	return nil;
+	return nil
+}
+
+func (repo *EventRepo) RecoverPending() ([]Events, error) {
+
+	rows, err := repo.db.Query(
+		context.Background(),
+		`SELECT id, "eventType", payload FROM event
+		WHERE status = 'PENDING'`,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	var events []Events
+
+	for rows.Next() {
+		var event Events
+
+		err := rows.Scan(
+			&event.ID,
+			&event.EventType,
+			&event.Payload,
+		)
+
+		if err != nil {
+			fmt.Println("Scan error:", err)
+			return nil, err
+		}
+
+		events = append(events, event)
+
+	}
+
+	return events, nil
 }

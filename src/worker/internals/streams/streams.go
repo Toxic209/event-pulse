@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -17,7 +18,38 @@ func EnsureGroupCreation(client *redis.Client) error {
 	).Err()
 }
 
-func FetchEvent(client *redis.Client, processorGroup string, consumerName string, repo *postgres.EventRepo) error {
+func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) error {
+
+	for _, event := range pendingEvents {
+		payloadJson, err := json.Marshal(event.Payload);
+
+		if err != nil {
+			fmt.Println("Error: ", err);
+		}
+
+		_, err = client.XAdd(context.Background(), &redis.XAddArgs{
+			Stream: "event",
+        Values: map[string] any {
+            "eventId":   event.ID,
+            "eventType": event.EventType,
+            "payload":   payloadJson,
+        },
+		}).Result()
+
+		if err != nil {
+			fmt.Println("error: ", err);
+			return err
+		}
+	}
+	return nil
+}
+
+func FetchEvent(
+	client *redis.Client, 
+	processorGroup string, 
+	consumerName string, 
+	repo *postgres.EventRepo,
+	) error {
 	streams, error := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
