@@ -21,23 +21,24 @@ func EnsureGroupCreation(client *redis.Client) error {
 func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) error {
 
 	for _, event := range pendingEvents {
-		payloadJson, err := json.Marshal(event.Payload);
+		payloadJson, err := json.Marshal(event.Payload)
 
 		if err != nil {
-			fmt.Println("Error: ", err);
+			fmt.Println("Error: ", err)
 		}
 
 		_, err = client.XAdd(context.Background(), &redis.XAddArgs{
 			Stream: "event",
-        Values: map[string] any {
-            "eventId":   event.ID,
-            "eventType": event.EventType,
-            "payload":   payloadJson,
-        },
+			Values: map[string]any{
+				"eventId":   event.ID,
+				"eventType": event.EventType,
+				"payload":   payloadJson,
+				"status": event.Status,
+			},
 		}).Result()
 
 		if err != nil {
-			fmt.Println("error: ", err);
+			fmt.Println("error: ", err)
 			return err
 		}
 	}
@@ -45,11 +46,11 @@ func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) err
 }
 
 func FetchEvent(
-	client *redis.Client, 
-	processorGroup string, 
-	consumerName string, 
+	client *redis.Client,
+	processorGroup string,
+	consumerName string,
 	repo *postgres.EventRepo,
-	) error {
+) error {
 	streams, err := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
@@ -61,7 +62,7 @@ func FetchEvent(
 	}).Result()
 
 	if err != nil {
-		log.Println(err);
+		log.Println(err)
 		return err
 	}
 
@@ -87,23 +88,32 @@ func FetchEvent(
 				if err == nil {
 
 					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err);
-						return err;
+						log.Println(err)
+						return err
 					}
 
 				} else {
+					failedEvent := msg.Values["status"] == "FAILED"
+					if failedEvent {
+						err := repo.IncrementRetryCount(eventId)
+
+						if err != nil {
+							fmt.Println(err)
+							return err
+						}
+					}
 					log.Println(err)
 
 					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err);
-						return err;
+						log.Println(err)
+						return err
 					}
 
 				}
 				_, err = client.XAck(context.Background(), "event", processorGroup, msg.ID).Result()
 				if err != nil {
 					fmt.Println(err)
-					return err;
+					return err
 				}
 
 			case "payment":
@@ -114,7 +124,7 @@ func FetchEvent(
 						continue
 					}
 				} else {
-					log.Println(err);
+					log.Println(err)
 
 					if err := repo.MarkFailed(eventId); err != nil {
 						log.Println(err)

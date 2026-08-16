@@ -15,6 +15,7 @@ type Events struct {
 	ID        string
 	EventType string
 	Payload   any
+	Status string
 }
 
 func NewEventRepo(db *pgx.Conn) EventRepo {
@@ -61,7 +62,7 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 
 	rows, err := repo.db.Query(
 		context.Background(),
-		`SELECT id, "eventType", payload FROM event
+		`SELECT id, "eventType", payload, status FROM event
 		WHERE status IN ('PENDING', 'FAILED')`,
 	)
 
@@ -80,6 +81,7 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 			&event.ID,
 			&event.EventType,
 			&event.Payload,
+			&event.Status,
 		)
 
 		if err != nil {
@@ -92,4 +94,17 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 	}
 
 	return events, nil
+}
+
+func (repo *EventRepo) IncrementRetryCount(eventId string) error {
+	_, err := repo.db.Exec(context.Background(), `
+	UPDATE event SET "retryCount" = "retryCount" + 1 WHERE id=$1
+	`, eventId);
+
+	if err != nil {
+		fmt.Println(err);
+		return err;
+	}
+
+	return nil
 }
