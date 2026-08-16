@@ -62,7 +62,7 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 	rows, err := repo.db.Query(
 		context.Background(),
 		`SELECT id, "eventType", payload FROM event
-		WHERE status = 'PENDING'`,
+		WHERE status IN ('PENDING', 'FAILED')`,
 	)
 
 	if err != nil {

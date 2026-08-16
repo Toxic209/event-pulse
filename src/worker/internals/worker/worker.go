@@ -22,12 +22,14 @@ func StartWorker(redis *redis.Client) error {
 
 	pendingEvents, err := repo.RecoverPending();
 	if err != nil {
+		log.Println(err);
 		return err;
 	}
 	fmt.Println("Pending events recovered:", len(pendingEvents))
 
 	err = streams.AddPendingEvents(pendingEvents, redis);
 	if err != nil {
+		log.Println(err);
 		return err;
 	}
 	

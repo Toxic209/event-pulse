@@ -50,7 +50,7 @@ func FetchEvent(
 	consumerName string, 
 	repo *postgres.EventRepo,
 	) error {
-	streams, error := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
+	streams, err := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
 		Streams:  []string{"event", ">"},
@@ -60,8 +60,9 @@ func FetchEvent(
 		Claim:    0,
 	}).Result()
 
-	if error != nil {
-		return error
+	if err != nil {
+		log.Println(err);
+		return err
 	}
 
 	for _, stream := range streams {
@@ -86,22 +87,23 @@ func FetchEvent(
 				if err == nil {
 
 					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err)
-						continue
+						log.Println(err);
+						return err;
 					}
 
 				} else {
 					log.Println(err)
 
 					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err)
-						continue
+						log.Println(err);
+						return err;
 					}
 
 				}
-				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result()
+				_, err = client.XAck(context.Background(), "event", processorGroup, msg.ID).Result()
 				if err != nil {
 					fmt.Println(err)
+					return err;
 				}
 
 			case "payment":
