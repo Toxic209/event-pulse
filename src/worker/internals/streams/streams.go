@@ -33,7 +33,7 @@ func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) err
 				"eventId":   event.ID,
 				"eventType": event.EventType,
 				"payload":   payloadJson,
-				"status": event.Status,
+				"status":    event.Status,
 			},
 		}).Result()
 
@@ -102,6 +102,7 @@ func FetchEvent(
 							return err
 						}
 					}
+
 					log.Println(err)
 
 					if err := repo.MarkFailed(eventId); err != nil {
@@ -124,6 +125,16 @@ func FetchEvent(
 						continue
 					}
 				} else {
+					failedEvent := msg.Values["status"] == "FAILED"
+					if failedEvent {
+						err := repo.IncrementRetryCount(eventId)
+
+						if err != nil {
+							fmt.Println(err)
+							return err
+						}
+					}
+
 					log.Println(err)
 
 					if err := repo.MarkFailed(eventId); err != nil {
@@ -136,6 +147,37 @@ func FetchEvent(
 					fmt.Println(err)
 				}
 			}
+		}
+	}
+
+	return nil
+}
+
+func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client) error {
+	deadEvents, err := repo.FetchDeadEvents()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	for _, deadEvent := range deadEvents {
+		payloadjson, err := json.Marshal(deadEvent.Payload)
+		if err != nil {
+			fmt.Println("JSON Marshall Error: ", err)
+		}
+
+		_, err = client.XAdd(context.Background(), &redis.XAddArgs{
+			Stream: "event-dlq",
+			Values: map[string]any{
+				"eventId":   deadEvent.ID,
+				"eventType": deadEvent.EventType,
+				"payload":   payloadjson,
+				"status":    deadEvent.Status,
+			},
+		}).Result()
+		if err != nil {
+			fmt.Println(err)
+			return err
 		}
 	}
 

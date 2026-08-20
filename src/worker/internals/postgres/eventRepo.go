@@ -63,7 +63,7 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 	rows, err := repo.db.Query(
 		context.Background(),
 		`SELECT id, "eventType", payload, status FROM event
-		WHERE status IN ('PENDING', 'FAILED')`,
+		WHERE status IN ('PENDING', 'FAILED') AND "retryCount" < 3`,
 	)
 
 	if err != nil {
@@ -107,4 +107,40 @@ func (repo *EventRepo) IncrementRetryCount(eventId string) error {
 	}
 
 	return nil
+}
+
+func (repo *EventRepo) FetchDeadEvents() ([]Events, error) {
+
+	rows, err := repo.db.Query(context.Background(), `
+	SELECT id, "eventType", payload, status FROM event WHERE "retryCount" >= 3
+	`,);
+
+	if err != nil {
+		fmt.Println(err);
+		return nil, err;
+	}
+
+	defer rows.Close();
+
+	var deadEvents []Events;
+
+	for rows.Next() {
+		var deadEvent Events;
+
+		err := rows.Scan(
+			&deadEvent.ID,
+			&deadEvent.EventType,
+			&deadEvent.Payload,
+			&deadEvent.Status,
+		)
+
+		if err != nil {
+			fmt.Println("Scan Error while scanning Dead Events: ", err);
+			return nil, err;
+		}
+
+		deadEvents = append(deadEvents, deadEvent);
+	}
+
+	return deadEvents, nil;
 }

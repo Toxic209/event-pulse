@@ -32,6 +32,12 @@ func StartWorker(redis *redis.Client) error {
 		log.Println(err);
 		return err;
 	}
+
+	err = streams.AddDeadEventsToDLQ(&repo, redis);
+	if err != nil {
+		log.Println(err);
+		return err;
+	}
 	
 	for {
 		consumerName := "worker-1"
