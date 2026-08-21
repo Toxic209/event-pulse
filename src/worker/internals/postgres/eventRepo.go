@@ -4,21 +4,21 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type EventRepo struct {
-	db *pgx.Conn
+	db *pgxpool.Pool
 }
 
 type Events struct {
 	ID        string
 	EventType string
 	Payload   any
-	Status string
+	Status    string
 }
 
-func NewEventRepo(db *pgx.Conn) EventRepo {
+func NewEventRepo(db *pgxpool.Pool) EventRepo {
 	return EventRepo{
 		db: db,
 	}
@@ -93,17 +93,21 @@ func (repo *EventRepo) RecoverPending() ([]Events, error) {
 
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return events, nil
 }
 
 func (repo *EventRepo) IncrementRetryCount(eventId string) error {
 	_, err := repo.db.Exec(context.Background(), `
 	UPDATE event SET "retryCount" = "retryCount" + 1 WHERE id=$1
-	`, eventId);
+	`, eventId)
 
 	if err != nil {
-		fmt.Println(err);
-		return err;
+		fmt.Println(err)
+		return err
 	}
 
 	return nil
@@ -113,19 +117,19 @@ func (repo *EventRepo) FetchDeadEvents() ([]Events, error) {
 
 	rows, err := repo.db.Query(context.Background(), `
 	SELECT id, "eventType", payload, status FROM event WHERE "retryCount" >= 3
-	`,);
+	`)
 
 	if err != nil {
-		fmt.Println(err);
-		return nil, err;
+		fmt.Println(err)
+		return nil, err
 	}
 
-	defer rows.Close();
+	defer rows.Close()
 
-	var deadEvents []Events;
+	var deadEvents []Events
 
 	for rows.Next() {
-		var deadEvent Events;
+		var deadEvent Events
 
 		err := rows.Scan(
 			&deadEvent.ID,
@@ -135,12 +139,16 @@ func (repo *EventRepo) FetchDeadEvents() ([]Events, error) {
 		)
 
 		if err != nil {
-			fmt.Println("Scan Error while scanning Dead Events: ", err);
-			return nil, err;
+			fmt.Println("Scan Error while scanning Dead Events: ", err)
+			return nil, err
 		}
 
-		deadEvents = append(deadEvents, deadEvent);
+		deadEvents = append(deadEvents, deadEvent)
 	}
 
-	return deadEvents, nil;
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return deadEvents, nil
 }

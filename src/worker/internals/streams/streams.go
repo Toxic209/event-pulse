@@ -50,12 +50,12 @@ func FetchEvent(
 	processorGroup string,
 	consumerName string,
 	repo *postgres.EventRepo,
-) error {
+) ([]redis.XStream, error) {
 	streams, err := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
 		Streams:  []string{"event", ">"},
-		Count:    1,
+		Count:    10,
 		Block:    0,
 		NoAck:    false,
 		Claim:    0,
@@ -63,91 +63,91 @@ func FetchEvent(
 
 	if err != nil {
 		log.Println(err)
-		return err
+		return []redis.XStream{}, err
 	}
 
-	for _, stream := range streams {
-		for _, msg := range stream.Messages {
+	return streams, nil
+}
 
-			payload, ok := msg.Values["payload"].(string)
+func ProcessEvent(client *redis.Client, repo *postgres.EventRepo, msg redis.XMessage, processorGroup string) error {
 
-			if !ok {
-				return fmt.Errorf("invalid payload")
+	payload, ok := msg.Values["payload"].(string)
+
+	if !ok {
+		return fmt.Errorf("invalid payload")
+	}
+
+	eventId, ok := msg.Values["eventId"].(string)
+	if !ok {
+		return fmt.Errorf("eventId is missing or not a string")
+	}
+
+	switch msg.Values["eventType"] {
+
+	case "email":
+		err := eventhandlers.EmailHandler(payload, eventId)
+
+		if err == nil {
+
+			if err := repo.MarkComplete(eventId); err != nil {
+				log.Println(err)
+				return err
 			}
 
-			eventId, ok := msg.Values["eventId"].(string)
-			if !ok {
-				return fmt.Errorf("eventId is missing or not a string")
-			}
+		} else {
+			failedEvent := msg.Values["status"] == "FAILED"
+			if failedEvent {
+				err := repo.IncrementRetryCount(eventId)
 
-			switch msg.Values["eventType"] {
-
-			case "email":
-				err := eventhandlers.EmailHandler(payload, eventId)
-
-				if err == nil {
-
-					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err)
-						return err
-					}
-
-				} else {
-					failedEvent := msg.Values["status"] == "FAILED"
-					if failedEvent {
-						err := repo.IncrementRetryCount(eventId)
-
-						if err != nil {
-							fmt.Println(err)
-							return err
-						}
-					}
-
-					log.Println(err)
-
-					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err)
-						return err
-					}
-
-				}
-				_, err = client.XAck(context.Background(), "event", processorGroup, msg.ID).Result()
 				if err != nil {
 					fmt.Println(err)
 					return err
 				}
+			}
 
-			case "payment":
-				err := eventhandlers.PaymentHandler(payload)
-				if err == nil {
-					if err := repo.MarkComplete(eventId); err != nil {
-						log.Println(err)
-						continue
-					}
-				} else {
-					failedEvent := msg.Values["status"] == "FAILED"
-					if failedEvent {
-						err := repo.IncrementRetryCount(eventId)
+			log.Println(err)
 
-						if err != nil {
-							fmt.Println(err)
-							return err
-						}
-					}
+			if err := repo.MarkFailed(eventId); err != nil {
+				log.Println(err)
+				return err
+			}
 
-					log.Println(err)
+		}
 
-					if err := repo.MarkFailed(eventId); err != nil {
-						log.Println(err)
-						continue
-					}
-				}
-				_, err = client.XAck(context.Background(), "event", "event-processors", msg.ID).Result()
+	case "payment":
+		err := eventhandlers.PaymentHandler(payload)
+		if err == nil {
+			if err := repo.MarkComplete(eventId); err != nil {
+				log.Println(err)
+				return err
+			}
+		} else {
+			failedEvent := msg.Values["status"] == "FAILED"
+			if failedEvent {
+				err := repo.IncrementRetryCount(eventId)
+
 				if err != nil {
 					fmt.Println(err)
+					return err
 				}
 			}
+
+			log.Println(err)
+
+			if err := repo.MarkFailed(eventId); err != nil {
+				log.Println(err)
+				return err
+			}
 		}
+	default:
+		return fmt.Errorf("unknown event type: %v", msg.Values["eventType"])
+
+	}
+	
+	_, err := client.XAck(context.Background(), "event", processorGroup, msg.ID).Result()
+	if err != nil {
+		fmt.Println(err)
+		return err
 	}
 
 	return nil

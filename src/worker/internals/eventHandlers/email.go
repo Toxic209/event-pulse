@@ -3,6 +3,7 @@ package eventhandlers
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type Email struct {
@@ -20,6 +21,8 @@ func EmailHandler(payload string, eventId string) error {
 	}
 	
 	fmt.Printf("Sending Email to %s\n", email.To);
+
+	time.Sleep(1 * time.Second)
 
 	if email.To == "test@fail.email" {
 		return fmt.Errorf("Error: Failed to send Email!");

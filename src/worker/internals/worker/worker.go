@@ -10,50 +10,70 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func StartWorker(redis *redis.Client) error {
+func StartWorker(client *redis.Client) error {
 
-	db, err := postgres.Connectpg();
+	consumerGroup := "event-processors"
+
+	db, err := postgres.Connectpg()
 
 	if err != nil {
-		return err;
+		return err
 	}
 
-	repo := postgres.NewEventRepo(db);
+	repo := postgres.NewEventRepo(db)
 
-	pendingEvents, err := repo.RecoverPending();
+	jobs := make(chan redis.XMessage);
+	processorBound := 10
+
+	pendingEvents, err := repo.RecoverPending()
 	if err != nil {
-		log.Println(err);
-		return err;
+		log.Println(err)
+		return err
 	}
 	fmt.Println("Pending events recovered:", len(pendingEvents))
 
-	err = streams.AddPendingEvents(pendingEvents, redis);
+	err = streams.AddPendingEvents(pendingEvents, client)
 	if err != nil {
-		log.Println(err);
-		return err;
+		log.Println(err)
+		return err
 	}
 
-	err = streams.AddDeadEventsToDLQ(&repo, redis);
+	err = streams.AddDeadEventsToDLQ(&repo, client)
 	if err != nil {
-		log.Println(err);
-		return err;
+		log.Println(err)
+		return err
 	}
-	
+
+	for i := 0; i < processorBound; i++ {
+		go func() {
+			for msg := range jobs {
+				streams.ProcessEvent(client, &repo, msg, consumerGroup)
+			}
+		}();
+	}
+
 	for {
 		consumerName := "worker-1"
 		if len(os.Args) >= 2 {
 			consumerName = os.Args[1]
 		}
 
-
 		if err != nil {
 			fmt.Println("Postgres connection failed!")
 		}
 
-		err = streams.FetchEvent(redis, "event-processors", consumerName, &repo)
+		fetchedStreams, err := streams.FetchEvent(client, consumerGroup, consumerName, &repo)
 
 		if err != nil {
 			log.Println(err)
+			return err
+		}
+
+		for _, stream := range fetchedStreams {
+			for _, msg := range stream.Messages {
+				jobs <- msg
+			}
 		}
 	}
+
 }

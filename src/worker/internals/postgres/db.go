@@ -6,22 +6,22 @@ import (
 	"log"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-func Connectpg() (*pgx.Conn, error) {
+func Connectpg() (*pgxpool.Pool, error) {
 	err := godotenv.Load("../../.env");
 	if err != nil {
 		log.Fatal(err);
 	}
 
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"));
+	pool, err := pgxpool.New(context.Background(), os.Getenv("DATABASE_URL"));
 	if err != nil {
 		panic(err);
 	}
 
 	fmt.Println("Connected to PostgreSQL")
 
-	return conn, nil;
+	return pool, nil;
 }
