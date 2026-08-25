@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/Toxic209/event-pulse/src/worker/internals/eventHandlers"
 	"github.com/Toxic209/event-pulse/src/worker/internals/postgres"
@@ -182,4 +183,23 @@ func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client) error {
 	}
 
 	return nil
+}
+
+func AutoClaimPendingEvents(client *redis.Client, consumerName string, consumerGroup string, start string) ([]redis.XMessage, string, error) {
+	pendingMessages, nextStart, err := client.XAutoClaim(context.Background(), &redis.XAutoClaimArgs{
+		Stream: "event",
+		Group: consumerGroup,
+		Consumer: consumerName,
+		MinIdle: 30 * time.Second,
+		Start: start,
+		Count: 10,
+	},
+	).Result()
+
+	if err != nil {
+		fmt.Println("Error Fetching Pending Events from PEL: ", err);
+		return nil, "", err;
+	}
+
+	return pendingMessages, nextStart, nil;
 }
