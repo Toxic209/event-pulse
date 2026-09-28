@@ -1,9 +1,13 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/Toxic209/event-pulse/src/worker/internals/postgres"
 	"github.com/Toxic209/event-pulse/src/worker/internals/streams"
@@ -11,6 +15,14 @@ import (
 )
 
 func StartWorker(client *redis.Client) error {
+
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+
+	defer stop();
 
 	consumerGroup := "event-processors"
 
@@ -48,21 +60,35 @@ func StartWorker(client *redis.Client) error {
 		return err
 	}
 
+	var wg sync.WaitGroup
+
 	for i := 0; i < processorBound; i++ {
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
 			for msg := range jobs {
 				streams.ProcessEvent(client, &repo, msg, consumerGroup)
 			}
 		}()
 	}
 
+	workerLoop:
 	for {
 		consumerName := "worker-1"
 		if len(os.Args) >= 2 {
 			consumerName = os.Args[1]
 		}
 
-		fetchedStreams, err := streams.FetchEvent(client, consumerGroup, consumerName, &repo)
+		fetchedStreams, err := streams.FetchEvent(ctx, client, consumerGroup, consumerName, &repo);
+
+		if err != nil {
+			if ctx.Err() != nil {
+				break
+			}
+
+			log.Println(err)
+			continue
+		}
 
 		if err != nil {
 			log.Println(err)
@@ -71,7 +97,12 @@ func StartWorker(client *redis.Client) error {
 
 		for _, stream := range fetchedStreams {
 			for _, msg := range stream.Messages {
-				jobs <- msg
+				select{
+				case jobs <- msg:
+
+				case <- ctx.Done():
+					break workerLoop
+				}
 			}
 		}
 
@@ -95,4 +126,12 @@ func StartWorker(client *redis.Client) error {
 			}
 		}
 	}
+
+	close(jobs);
+	wg.Wait();
+	db.Close();
+	client.Close();
+
+
+	return nil
 }

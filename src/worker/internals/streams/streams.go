@@ -47,12 +47,13 @@ func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) err
 }
 
 func FetchEvent(
+	ctx context.Context,
 	client *redis.Client,
 	processorGroup string,
 	consumerName string,
 	repo *postgres.EventRepo,
 ) ([]redis.XStream, error) {
-	streams, err := client.XReadGroup(context.Background(), &redis.XReadGroupArgs{
+	streams, err := client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
 		Streams:  []string{"event", ">"},
