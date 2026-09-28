@@ -1,4 +1,4 @@
-import prisma from "../../../postgres/prisma.js";
+import prisma from "../../postgres/prisma.js";
 import type eventData from "../../types/types.js";
 import { ApiError } from "../../utils/ApiError.js";
 import redis from "../../redis/redis.js";

@@ -13,9 +13,9 @@
   "license": "ISC",
   "author": "Rohit Pandey",
   "type": "module",
-  "main": "index.ts",
+  "main": "src/api/index.ts",
   "scripts": {
-    "dev": "nodemon src/index.ts"
+    "dev": "nodemon src/api/index.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

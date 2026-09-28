@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify"
 import prisma from "./postgres/prisma.js";
-import eventRoutes from "./api/modules/events/event.routes.js";
+import eventRoutes from "./modules/events/event.routes.js";
 
 const app = Fastify({
     logger: true

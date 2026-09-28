@@ -22,7 +22,7 @@ func PaymentHandler(payload string) error {
 
 	fmt.Printf("Sending amount %d to %s\n", payment.Amount, payment.Reciever);
 	time.Sleep(1 * time.Second);
-	fmt.Printf("Sent %d to %s", payment.Amount, payment.Reciever);
+	fmt.Printf("Sent %d to %s\n", payment.Amount, payment.Reciever);
 
 	if payment.Reciever == "failed-payment" {
 		return fmt.Errorf("Error: SImulated Payment Failure!");
