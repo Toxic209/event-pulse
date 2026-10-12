@@ -14,7 +14,8 @@ func NewRedisClient() *redis.Client {
 		log.Fatal(err);
 	}
 
-	opts, err := redis.ParseURL(os.Getenv("REDIS_URL"))
+	opts, err := redis.ParseURL(os.Getenv("REDIS_URL"));
+	opts.ContextTimeoutEnabled = true
 	if err != nil {
 		panic(err)
 	}

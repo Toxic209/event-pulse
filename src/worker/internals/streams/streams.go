@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
+	"errors"
 
 	"github.com/Toxic209/event-pulse/src/worker/internals/eventHandlers"
 	"github.com/Toxic209/event-pulse/src/worker/internals/postgres"
@@ -19,13 +20,13 @@ func EnsureGroupCreation(client *redis.Client) error {
 	).Err()
 }
 
-func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) error {
+func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client, logger *slog.Logger) error {
 
 	for _, event := range pendingEvents {
 		payloadJson, err := json.Marshal(event.Payload)
 
 		if err != nil {
-			fmt.Println("Error: ", err)
+			return fmt.Errorf("Error: %w", err)
 		}
 
 		_, err = client.XAdd(context.Background(), &redis.XAddArgs{
@@ -39,7 +40,12 @@ func AddPendingEvents(pendingEvents []postgres.Events, client *redis.Client) err
 		}).Result()
 
 		if err != nil {
-			fmt.Println("error: ", err)
+			logger.Error(
+				"Failed to add pending events back to the stream.",
+				"eventId", event.ID,
+				"eventType", event.EventType,
+				"error", err,
+			)
 			return err
 		}
 	}
@@ -52,26 +58,49 @@ func FetchEvent(
 	processorGroup string,
 	consumerName string,
 	repo *postgres.EventRepo,
+	logger *slog.Logger,
 ) ([]redis.XStream, error) {
 	streams, err := client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    processorGroup,
 		Consumer: consumerName,
 		Streams:  []string{"event", ">"},
 		Count:    10,
-		Block:    0,
+		Block:    5 * time.Second,
 		NoAck:    false,
 		Claim:    0,
 	}).Result()
 
 	if err != nil {
-		log.Println(err)
+
+		if ctx.Err() != nil {
+			return nil, ctx.Err();
+		}
+
+		if errors.Is(err, redis.Nil){
+			return nil, nil;
+		}
+
+		logger.Error(
+			"Failed to fetch event from stream",
+			"processor-group", processorGroup,
+			"consumer-name", consumerName,
+			"error", err,
+		)
+
 		return []redis.XStream{}, err
 	}
 
 	return streams, nil
 }
 
-func ProcessEvent(client *redis.Client, repo *postgres.EventRepo, msg redis.XMessage, processorGroup string) error {
+func ProcessEvent(
+	client *redis.Client,
+	repo *postgres.EventRepo,
+	msg redis.XMessage,
+	processorGroup string,
+	logger *slog.Logger,
+	processorName string,
+) error {
 
 	payload, ok := msg.Values["payload"].(string)
 
@@ -84,68 +113,85 @@ func ProcessEvent(client *redis.Client, repo *postgres.EventRepo, msg redis.XMes
 		return fmt.Errorf("eventId is missing or not a string")
 	}
 
-	switch msg.Values["eventType"] {
+	eventType := msg.Values["eventType"].(string)
+
+	eventLogger := logger.With(
+		"event_id", eventId,
+		"event_type", eventType,
+		"processor", processorName,
+	)
+
+	switch eventType {
 
 	case "email":
 		err := eventhandlers.EmailHandler(payload, eventId)
 
 		if err == nil {
 
+			eventLogger.Info("event processed")
+
 			if err := repo.MarkComplete(eventId); err != nil {
-				log.Println(err)
+				eventLogger.Error("Unable to mark complete after event processing,", "error", err)
 				return err
 			}
 
 		} else {
+			eventLogger.Error("event processing failed", "error", err)
+
 			failedEvent := msg.Values["status"] == "FAILED"
+
 			if failedEvent {
 				err := repo.IncrementRetryCount(eventId)
 
 				if err != nil {
-					fmt.Println(err)
+					eventLogger.Error("failed to increment retry count.", "error", err)
 					return err
 				}
 			}
 
-			log.Println(err)
-
 			if err := repo.MarkFailed(eventId); err != nil {
-				log.Println(err)
+				eventLogger.Error("unable to mark event as failed after failure", "error", err)
 				return err
 			}
-
 		}
 
 	case "payment":
 		err := eventhandlers.PaymentHandler(payload)
+
 		if err == nil {
+
+			eventLogger.Info("event processed")
+
 			if err := repo.MarkComplete(eventId); err != nil {
-				log.Println(err)
+				eventLogger.Error("Unable to mark complete after event processing,", "error", err)
 				return err
 			}
+
 		} else {
+
+			eventLogger.Error("event processing failed", "error", err)
+
 			failedEvent := msg.Values["status"] == "FAILED"
+
 			if failedEvent {
 				err := repo.IncrementRetryCount(eventId)
 
 				if err != nil {
-					fmt.Println(err)
+					eventLogger.Error("failed to increment retry count.", "error", err)
 					return err
 				}
 			}
 
-			log.Println(err)
-
 			if err := repo.MarkFailed(eventId); err != nil {
-				log.Println(err)
+				eventLogger.Error("unable to mark event as failed after failure", "error", err)
 				return err
 			}
 		}
 	default:
-		return fmt.Errorf("unknown event type: %v", msg.Values["eventType"])
-
+		eventLogger.Error("unknown event type", "event_type", eventType)
+		return fmt.Errorf("unknow event type: %s", eventType)
 	}
-	
+
 	_, err := client.XAck(context.Background(), "event", processorGroup, msg.ID).Result()
 	if err != nil {
 		fmt.Println(err)
@@ -155,17 +201,20 @@ func ProcessEvent(client *redis.Client, repo *postgres.EventRepo, msg redis.XMes
 	return nil
 }
 
-func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client) error {
+func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client, logger *slog.Logger) error {
+
 	deadEvents, err := repo.FetchDeadEvents()
+
 	if err != nil {
-		fmt.Println(err)
-		return err
+		return fmt.Errorf("Error fetching dead events: %w", err)
 	}
 
 	for _, deadEvent := range deadEvents {
+
 		payloadjson, err := json.Marshal(deadEvent.Payload)
+
 		if err != nil {
-			fmt.Println("JSON Marshall Error: ", err)
+			return fmt.Errorf("JSON Marshall Error: %w", err)
 		}
 
 		_, err = client.XAdd(context.Background(), &redis.XAddArgs{
@@ -178,7 +227,12 @@ func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client) error {
 			},
 		}).Result()
 		if err != nil {
-			fmt.Println(err)
+			logger.Error(
+				"Failed to add dead events to the DLQ.",
+				"eventId", deadEvent.ID,
+				"eventType", deadEvent.EventType,
+				"error", err,
+			)
 			return err
 		}
 	}
@@ -186,21 +240,32 @@ func AddDeadEventsToDLQ(repo *postgres.EventRepo, client *redis.Client) error {
 	return nil
 }
 
-func AutoClaimPendingEvents(client *redis.Client, consumerName string, consumerGroup string, start string) ([]redis.XMessage, string, error) {
+func AutoClaimPendingEvents(
+	client *redis.Client,
+	consumerName string,
+	consumerGroup string,
+	start string,
+	logger *slog.Logger) ([]redis.XMessage, string, error) {
 	pendingMessages, nextStart, err := client.XAutoClaim(context.Background(), &redis.XAutoClaimArgs{
-		Stream: "event",
-		Group: consumerGroup,
+		Stream:   "event",
+		Group:    consumerGroup,
 		Consumer: consumerName,
-		MinIdle: 30 * time.Second,
-		Start: start,
-		Count: 10,
+		MinIdle:  30 * time.Second,
+		Start:    start,
+		Count:    10,
 	},
 	).Result()
 
 	if err != nil {
-		fmt.Println("Error Fetching Pending Events from PEL: ", err);
-		return nil, "", err;
+		logger.Error(
+			"Error Fetching Pending Events from PEL.",
+			"consumer-group", consumerGroup,
+			"consumer-name", consumerName,
+			"error", err,
+		)
+
+		return pendingMessages, nextStart, nil
 	}
 
-	return pendingMessages, nextStart, nil;
+	return pendingMessages, nextStart, nil
 }

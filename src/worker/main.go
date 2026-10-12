@@ -1,19 +1,29 @@
 package main
 
 import (
-	"fmt"
+	"log/slog"
+	"os"
+
 	"github.com/Toxic209/event-pulse/src/worker/internals/redis"
 	"github.com/Toxic209/event-pulse/src/worker/internals/streams"
 	"github.com/Toxic209/event-pulse/src/worker/internals/worker"
 )
 
 func main() {
-	fmt.Println("Go worker running...")
+
+	logger := slog.New(
+		slog.NewJSONHandler(os.Stdout, nil),
+	)
 
 		redis := redis.NewRedisClient()
 
 		streams.EnsureGroupCreation(redis)
 
-		worker.StartWorker((redis))
+		err := worker.StartWorker(redis, logger);
+
+		if err != nil {
+			logger.Error("Unable to Start Worker", "error", err);
+			os.Exit(1);
+		}
 	
 }
