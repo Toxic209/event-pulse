@@ -1,21 +1,23 @@
-# HIGH THROUGHPUT EVENT PROCESSING PLATFORM
+# EventPulse
 
-## Problem Statement:
+EventPulse is an asynchronous event-processing system built with Go, PostgreSQL, Redis Streams, and TypeScript.
 
-#### Imagine thousands of applications are sending events to your platform:
+## Architecture
 
-* User signed up
-* Payment completed
-* Order shipped
-* Password changed
-* Email sent
+- **API:** Accepts events and persists them in PostgreSQL.
+- **Redis Streams:** Queues events for asynchronous processing.
+- **Go Workers:** Process events concurrently, with retries and dead-letter handling.
+- **PostgreSQL:** Stores event data and processing status.
+- **Monitoring:** Prometheus metrics and Grafana dashboards for observability.
 
-#### Your platform must:
+## Tech Stack
 
-* Accept events through an API.
-* Store them reliably.
-* Process them asynchronously.
-* Retry failed processing.
-* Track processing status.
-* Expose metrics and logs.
-* Handle spikes in traffic.
+- TypeScript, Node.js
+- Go
+- PostgreSQL
+- Redis Streams
+- Prometheus & Grafana
+
+## Status
+
+Core event processing is implemented. Monitoring and Documentation are in progress.
