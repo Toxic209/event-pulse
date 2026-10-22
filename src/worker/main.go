@@ -20,9 +20,9 @@ func main() {
 
 		streams.EnsureGroupCreation(redis);
 
-		err := worker.StartWorker(redis, logger);
-
 		go monitoring.StartMetricServer();
+
+		err := worker.StartWorker(redis, logger);
 		
 		if err != nil {
 			logger.Error("Unable to Start Worker", "error", err);

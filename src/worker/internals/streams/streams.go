@@ -3,13 +3,14 @@ package streams
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
-	"errors"
 
 	"github.com/Toxic209/event-pulse/src/worker/internals/eventHandlers"
 	"github.com/Toxic209/event-pulse/src/worker/internals/postgres"
+	"github.com/Toxic209/event-pulse/src/worker/monitoring"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -73,11 +74,11 @@ func FetchEvent(
 	if err != nil {
 
 		if ctx.Err() != nil {
-			return nil, ctx.Err();
+			return nil, ctx.Err()
 		}
 
-		if errors.Is(err, redis.Nil){
-			return nil, nil;
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
 		}
 
 		logger.Error(
@@ -101,6 +102,12 @@ func ProcessEvent(
 	logger *slog.Logger,
 	processorName string,
 ) error {
+
+	started := time.Now()
+	defer monitoring.RecordProcessingDuration(started)
+
+	monitoring.IncEventsInFlight()
+	defer monitoring.DecEventsInFlight()
 
 	payload, ok := msg.Values["payload"].(string)
 
@@ -135,7 +142,11 @@ func ProcessEvent(
 				return err
 			}
 
+			monitoring.RecordProcessedEvent();
+
 		} else {
+			monitoring.RecordFailedEvents()
+
 			eventLogger.Error("event processing failed", "error", err)
 
 			failedEvent := msg.Values["status"] == "FAILED"
@@ -147,6 +158,8 @@ func ProcessEvent(
 					eventLogger.Error("failed to increment retry count.", "error", err)
 					return err
 				}
+
+				monitoring.RecordRetriedEvents();
 			}
 
 			if err := repo.MarkFailed(eventId); err != nil {
@@ -167,7 +180,10 @@ func ProcessEvent(
 				return err
 			}
 
+			monitoring.RecordProcessedEvent();
+
 		} else {
+			monitoring.RecordFailedEvents()
 
 			eventLogger.Error("event processing failed", "error", err)
 
@@ -180,6 +196,8 @@ func ProcessEvent(
 					eventLogger.Error("failed to increment retry count.", "error", err)
 					return err
 				}
+
+				monitoring.RecordRetriedEvents();
 			}
 
 			if err := repo.MarkFailed(eventId); err != nil {

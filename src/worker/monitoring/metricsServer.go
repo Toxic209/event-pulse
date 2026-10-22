@@ -16,7 +16,7 @@ func StartMetricServer() {
 
 	log.Printf("Metrics server stopped: %v", err)
 
-	// if err != nil {
-	// 	log.Fatal(err);
-	// }
+	if err != nil {
+		log.Fatal(err);
+	}
 }
